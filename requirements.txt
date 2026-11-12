@@ -1,0 +1,7 @@
+# Nucleo del proyecto (versiones >= a las usadas en el desarrollo local)
+numpy>=1.26
+scipy>=1.11        # opcional: tests de referencia; el codigo no lo exige
+matplotlib>=3.8    # figuras de convergencia (analisis)
+PyYAML>=6.0        # configs/protocol.yaml
+# En MC2/chronosunb (Python 3.11) se anadira para la BNN industrial:
+# torch>=2.2

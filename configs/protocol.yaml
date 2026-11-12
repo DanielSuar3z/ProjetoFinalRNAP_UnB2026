@@ -1,0 +1,42 @@
+# Protocolo ResBO — IDENTICO para los 4 brazos (MFO, GWO, BO+prior, BO solo)
+# Caja de controles: [RATE x 8 inyectores (sm3/d), BHP x 4 productores (bar)]
+project: ResBO
+reservoir: egg-mock          # MockSimulator local; egg-opm en MC2
+n_injectors: 8
+n_producers: 4
+horizon_months: 130
+
+bounds:
+  rate:  [500.0, 3000.0]     # sm3/d por inyector
+  bhp:   [150.0, 350.0]      # bar por productor
+
+economics:
+  price_oil: 60.0            # USD/sm3
+  cost_liquid: 8.0           # USD/sm3 (manejo de líquido)
+  annual_discount: 0.10
+
+budget:                      # por brazo y por seed (contingencia: bajar n_seeds/iter)
+  metaheuristics: {pop: 10, iters: 5}        # 10 + 10*5 = 60 sims
+  bo:               {batch: 5, iters: 10, pool: 4000}   # 50 sims (incluye inicial DoE)
+n_seeds: 4                   # demo toy; protocolo real: 20
+
+# hiperparametros por algoritmo — DEFAULTS IGUALITOS a los del repo BIOPSO
+# (pso_wellcontrol.py / foa_wellcontrol.py) para que la version local replique
+# el comportamiento de las corridas que generan los datos de entrenamiento
+pso:
+  inertia: 0.7               # psoInertia (w CONSTANTE, sin decay)
+  cognitive: 1.5             # psoCognitive (c1)
+  social: 1.5                # psoSocial (c2)
+foa:
+  step: 0.1                  # foaStep: radio de vuelo = 0.1 * ancho de caja
+
+crm:
+  min_excitation: 50.0       # umbral de tasa para considerar excitada una arista
+
+prior:
+  w0: 0.5                    # peso inicial del prior en la adquisicao
+  decay_obs: 30.0            # decaimiento estilo DynMeanBO: w = w0 * exp(-n_obs/decay_obs)
+  use_full_crm: true         # false => voidage escalar (caso degenerado)
+
+paths:
+  experiments: experiments

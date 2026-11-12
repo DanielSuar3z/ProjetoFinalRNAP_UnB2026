@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Resultados regenerables grandes (la demo toy pequeña sí se versiona)
+*.pkl
+
+# Referencia de código PRIVADO del equipo (repo BIOPSO) — no publicar
+docs/ref_biopso/
