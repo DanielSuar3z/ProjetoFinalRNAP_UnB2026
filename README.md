@@ -32,7 +32,9 @@ resbo/
 ├── scripts/toy_experiment.py  # DEMO end-to-end con MockSimulator (sin MC2, sin OPM)
 ├── scripts/train_bnn.py       # entrena BNN desde una BD (gate NRMSE_val < 5%) → bnn_*.npz
 ├── scripts/fit_crm.py         # ajusta el prior CRM (gate R² por pozo) → crm_*.npz (--self-check sin datos)
+├── scripts/export_deploy.py   # empaqueta deploy/resbo_v1/ para el brazo BO de BIOPSO (gates + manifest sha256)
 ├── scripts/validate_loader.py # verificador del contrato simlog (--self-check sin datos)
+├── deploy/resbo_v1/           # (generado, no versionado) data_v1 + crm_v1 + bnn_v1 + manifest → MC2 por rsync
 ├── docs/estudo/               # notas de estudio + contrato simlog_spec_v1 (source of truth)
 ├── docs/guia_codigo/          # una nota por archivo del repo, explicada a detalle
 ├── docs/bitacora/             # relato cronológico paso a paso (por qué estamos donde estamos)
@@ -59,8 +61,12 @@ algo real que aprender: si el pipeline funciona aquí, el único cambio para MC2
 2. ✔ Lado BIOPSO: instrumentado en los 5 algoritmos + algoritmo `random` para el
    DoE + verificador (`BIOPSO` commits `eb10786`/`79b76fb`); coleta S1 = 1.920 sims.
 3. ✔ Ingesta local: `src/resbo/loader_biopso.py` (ruta A completa / ruta B rescate),
-   `scripts/train_bnn.py` con gate, persistencia `bnn_v1.npz` (sin pickle).
-4. ⏳ Pendiente: transferir `coleta_s1` + `harvest_2026_11`, ajustar CRM real
-   (`scripts/fit_crm.py`), entrenar `bnn_v1` y correr el brazo BO como Algorithm
-   de BIOPSO (`resbo_wellcontrol.py`) en MC2.
-5. Reglas MC2: máx 7 sims simultáneas, sesión SSH conectada (nohup + wait), nunca disown.
+   `scripts/train_bnn.py` con gate, persistencia `bnn_v1.npz` (sin pickle),
+   prior CRM persistido `crm_v1.npz` + `scripts/fit_crm.py` con gate R² por pozo (T-R4).
+4. ✔ Brazo BO como Algorithm de BIOPSO (T-R5): `storms_unb/resbo/resbo_wellcontrol.py`
+   (rama `feature/bayes-crm-ingesta`, 18 tests) + puente por contractos
+   (`scripts/export_deploy.py` → `deploy/resbo_v1/`) + runbook `COLECTA_S3.md`.
+5. ⏳ Pendiente: transferir `coleta_s1` + `harvest_2026_11`, ajustar CRM real
+   (`scripts/fit_crm.py`), entrenar `bnn_v1` (gate NRMSE), exportar el deploy y
+   correr los smokes y las 2×20 corridas de medida en MC2.
+6. Reglas MC2: máx 7 sims simultáneas, sesión SSH conectada (nohup + wait), nunca disown.

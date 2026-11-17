@@ -13,3 +13,7 @@ experiments/demo_harvest/
 
 # Referencia de código PRIVADO del equipo (repo BIOPSO) — no publicar
 docs/ref_biopso/
+
+# Deploy del brazo BO para BIOPSO (npz binarios + manifest): se transfiere a
+# MC2 por rsync/scp con verificacion de sha256, nunca por git
+deploy/

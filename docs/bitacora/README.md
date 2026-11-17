@@ -31,6 +31,7 @@ Si quieres ENTENDER el proyecto (no solo operarlo), lee esta bitácora en orden.
 | [08](08_t_r1_realineacion_egg_test.md) | T-R1: realineación del protocolo local al caso EGG_TEST real | 2026-11-17 | ✔ |
 | [09](09_calendario_y_pendientes.md) | Re-ancoraje a la fecha real de entrega (09/12/2026) y cola de tareas | 2026-11-17 | en curso |
 | [10](10_t_r4_crm_offline.md) | T-R4 preparado offline: script `fit_crm.py`, contracto `crm_v1.npz` y gate por pozo | 2026-11-17 | ✔ |
+| [11](11_t_r5_brazo_bo_biopso.md) | T-R5: el brazo BO cruza la frontera — BIOPSO corre la Optimización Bayesiana | 2026-11-17 | ✔ |
 
 ## Convenciones de la bitácora
 
