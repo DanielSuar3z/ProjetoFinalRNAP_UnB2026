@@ -17,3 +17,8 @@ docs/ref_biopso/
 # Deploy del brazo BO para BIOPSO (npz binarios + manifest): se transfiere a
 # MC2 por rsync/scp con verificacion de sha256, nunca por git
 deploy/
+
+# Cosechas reales (harvest rescate MC2, coleta S1): datos del motor privado viajan
+# por scp/rsync con sha256, nunca por git (repo final es publico)
+experiments/harvest_*/
+experiments/coleta*/
