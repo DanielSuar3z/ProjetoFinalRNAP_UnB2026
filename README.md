@@ -10,7 +10,7 @@ injetor–produtor de un modelo capacitância-resistência (CRM)** ajustado con 
 producción de las propias corridas de los baselines (MFO/GWO/PSO/FOA del repo BIOPSO) — sin
 simulaciones adicionales. El voidage balance es el caso degenerado (escalar) del prior.
 
-Futuro repo público del curso: `ProjetoFinalRNAP_UnB2026`.
+Repo público del curso: **`DanielSuar3z/ProjetoFinalRNAP_UnB2026`** (este directorio).
 
 ## Estructura
 
@@ -30,7 +30,11 @@ resbo/
 │   └── analysis/              # métricas (AUC, sims-al-umbral) + Mann-Whitney/rank-biserial
 ├── experiments/               # resultados versionados (results.csv) + BOARD.md de jobs MC2
 ├── scripts/toy_experiment.py  # DEMO end-to-end con MockSimulator (sin MC2, sin OPM)
-├── docs/estudo/               # notas de estudio dirigido (ver cronograma)
+├── scripts/train_bnn.py       # entrena BNN desde una BD (gate NRMSE_val < 5%) → bnn_*.npz
+├── scripts/validate_loader.py # verificador del contrato simlog (--self-check sin datos)
+├── docs/estudo/               # notas de estudio + contrato simlog_spec_v1 (source of truth)
+├── docs/guia_codigo/          # una nota por archivo del repo, explicada a detalle
+├── docs/bitacora/             # relato cronológico paso a paso (por qué estamos donde estamos)
 └── CHANGELOG.md               # bitácora de decisiones (regla heredada de BIOPSO)
 ```
 
@@ -47,9 +51,15 @@ figuras de convergência y la tabla Mann-Whitney. El MockSimulator imita la estr
 algo real que aprender: si el pipeline funciona aquí, el único cambio para MC2 es inyectar
 `OpmSimulator`.
 
-## Para MC2 (tarea 1.3+ del cronograma)
+## Integración con BIOPSO/MC2 (estado 2026-11-17)
 
-1. Copiar `src/resbo/` al repo BIOPSO (o crear el repo del curso y traer los algoritmos adaptados).
-2. Implementar `OpmSimulator` como envoltorio del motor headless (`run_generic.py` / spawns de
-   `mpirun -n 1 flow`) y registrar por sim: controles, VPL y curva de producción por poço.
-3. Reglas MC2: máx 7 sims simultáneas, sesión SSH conectada (nohup + wait), nunca disown.
+1. ✔ Contrato de datos congelado: `docs/estudo/simlog_spec_v1.md` (simlog.csv de
+   15 columnas + sim_curves.npz por corrida, orden plano (ronda,agente)).
+2. ✔ Lado BIOPSO: instrumentado en los 5 algoritmos + algoritmo `random` para el
+   DoE + verificador (`BIOPSO` commits `eb10786`/`79b76fb`); coleta S1 = 1.920 sims.
+3. ✔ Ingesta local: `src/resbo/loader_biopso.py` (ruta A completa / ruta B rescate),
+   `scripts/train_bnn.py` con gate, persistencia `bnn_v1.npz` (sin pickle).
+4. ⏳ Pendiente: transferir `coleta_s1` + `harvest_2026_11`, ajustar CRM real
+   (`scripts/fit_crm.py`), entrenar `bnn_v1` y correr el brazo BO como Algorithm
+   de BIOPSO (`resbo_wellcontrol.py`) en MC2.
+5. Reglas MC2: máx 7 sims simultáneas, sesión SSH conectada (nohup + wait), nunca disown.
