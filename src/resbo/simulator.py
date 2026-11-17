@@ -28,6 +28,13 @@ class MockSimulator(BaseSimulator):
     Queda implicito que la produccion "ve" la conectividad -> un CRM puede
     recuperarla. La fraccion de agua sube con el volumen inyectado acumulado
     dirigido al pozo (breakthrough) -> inyectar de mas acelera agua (coste).
+
+    Economia (T-R1): replica las TRES tarifas de NPVHandler del caso EGG_TEST:
+        cash_t = OPR_t*oil_revenue - WPR_t*water_cost - WIR_t*water_injection_cost
+    (volúmenes mensuales = tasa*days; descuentos mensuales de la tasa anual).
+    Calibrado a la caja real 0-150 sm3/d / 200-395 bar: PI/p0/pv elegidos para
+    que el optimum quede INTERIOR (producir sin agua cuesta; inyectar de mas
+    paga waterInjectionCost y adelanta breakthrough).
     """
 
     def __init__(self, protocol, seed: int = 42):
@@ -35,8 +42,9 @@ class MockSimulator(BaseSimulator):
         self.n_prod = protocol.n_prod
         self.T = protocol.horizon
         e = protocol["economics"]
-        self.price = e["price_oil"]
-        self.cost = e["cost_liquid"]
+        self.oil_rev = e["oil_revenue"]
+        self.water_cost = e["water_cost"]
+        self.inj_cost = e["water_injection_cost"]
         self.disc = (1.0 + e["annual_discount"]) ** (1.0 / 12.0)
 
         rng = np.random.default_rng(seed)
@@ -44,11 +52,15 @@ class MockSimulator(BaseSimulator):
         tau = tau / tau.sum(axis=1, keepdims=True)   # cada inyector reparte 1.0
         self.tau_true = tau
 
-        self.PI = 0.9                                 # productividad (m3/d / bar)
+        self.PI = 2.5                                 # productividad (m3/d / bar)
         self.c_store = 12.0                           # capacidad (bar*d/m3)
-        self.p0 = 300.0                               # presion inicial (bar)
+        self.p0 = 380.0                               # presion inicial (bar)
         self.lag = 24.0                               # meses, retardo del soporte
-        self.pv = 2.6e7                               # volumen poroso (m3) por productor
+        self.pv = 8.0e5                               # volumen poroso (m3) por productor
+        self.q_ref = 400.0                            # caudal de escala del cono (m3/d)
+        self.cone_v = 0.3                             # cono dinamico por caudal
+        self.p_woc = 330.0                            # presion de contacto agua-aceite
+        self.cone_b = 0.9                             # cono por drawdown bajo el WOC
         self.days = 30.0
 
     def evaluate(self, controls: np.ndarray) -> dict:
@@ -74,13 +86,23 @@ class MockSimulator(BaseSimulator):
             p_cur = p_cur + (support_t[k] - q[k]) / self.c_store
             p[k] = p_cur
 
-        fw = np.clip(0.15 + 0.85 * (cum_dir / self.pv) ** 0.6, 0.0, 0.98)
+        # breakthrough: el volumen inyectado DIRIGIDO acumulado perfora el poro
+        # (cum_dir/pv) y dos mecanismos lo aceleran: caudal alto (cono dinamico,
+        # cone_v*q) y producir por debajo del contacto agua-aceite (cono por
+        # drawdown, cone_b*(p_woc-bhp)). Bajar BHP sube q PERO acerca el agua.
+        dd = np.maximum(self.p_woc - bhp[None, :], 0.0) / 100.0   # (1, n_prod)
+        fw = np.clip(0.15 + 0.85 * (cum_dir / self.pv) ** 0.6
+                     * (1.0 + self.cone_v * q / self.q_ref + self.cone_b * dd),
+                     0.15, 0.98)
         q_oil = q * (1.0 - fw)
         q_liq = q
+        q_wat = q * fw
 
         disc = self.disc ** (-t)
-        cash = (q_oil.sum(axis=1) * self.price
-                - q_liq.sum(axis=1) * self.cost) * self.days
+        # las 3 tarifas de NPVHandler (EGG_TEST): aceite - agua producida - agua inyectada
+        cash = (q_oil.sum(axis=1) * self.oil_rev
+                - q_wat.sum(axis=1) * self.water_cost
+                - rate.sum() * self.inj_cost) * self.days
         npv = float((cash * disc).sum())
         # convencion del proyecto: curvas en (n_prod, horizon)
         return {"npv": npv, "prod_curve": q_liq.T, "fw_curve": fw.T}

@@ -46,15 +46,18 @@ Su trabajo es ser lo suficientemente "física" para que:
 | Atributo | Valor | Qué es | Por qué ese nombre |
 |---|---|---|---|
 | `n_inj`, `n_prod`, `T` | 8, 4, 130 | Vienen del `Protocol`. `T` = nº de meses del horizonte (convención: `T` para el nº de pasos de tiempo). |
-| `price` | 60 USD/sm3 | Precio del petróleo. |
-| `cost` | 8 USD/sm3 | Coste por m³ de **líquido** producido (agua+aceite): manejar agua cuesta. |
-| `disc` | (1+0.10)^(1/12) | Factor de descuento **mensual**. Se guarda la base (1.1)^(1/12) para aplicar `disc**(-t)`. `disc` = discount. |
+| `oil_rev` | 45 USD/sm3 | Ingreso por m³ de **aceite** (`oilRevenue` de EGG_TEST). |
+| `water_cost` | 6 USD/sm3 | Coste por m³ de **agua producida** (`waterCost`). |
+| `inj_cost` | 2 USD/sm3 | Coste por m³ de **agua inyectada** (`waterInjectionCost`): bombeo, aunque nunca vuelva a superficie. Añadido en T-R1; sin él la inyección salía gratis y el mock premiaba "siempre más soporte". |
+| `disc` | (1+0.08)^(1/12) | Factor de descuento **mensual** (8% = `discountRate` del caso). Se guarda la base para aplicar `disc**(-t)`. |
 | `tau_true` | `(8,4)`, oculta | **Las conectividades verdaderas.** `rng.uniform(0.3,1.0)` y normalizada **por fila** (`tau/tau.sum(axis=1)`): cada inyector reparte un total de 1.0 entre sus 4 productores. Solo el mock la conoce; el CRM intenta adivinarla. `axis=1` = sumar por filas (por inyector). |
-| `PI` | 0.9 m³/d/bar | Productivity Index: `q = PI·(p − bhp)`. Es la "ley de Darcy" del pozo. Se llama PI por la convención petrolera (IP/PI). |
+| `PI` | 2.5 m³/d/bar | Productivity Index: `q = PI·(p − bhp)`. Recalibrado en T-R1 para la caja real (0–150 sm³/d): con PI 0.9 el pozo nunca equilibraba soportes de ~100–300 m³/d. |
 | `c_store` | 12 bar·d/m³ | Capacidad del reservorio por productor: cuánto sube la presión por m³ acumulado (`dp = (soporte − q)/c_store`). `c` = capacitance (¡de ahí que el CRM sea un modelo de capacitancia-resistencia!). |
-| `p0` | 300 bar | Presión inicial. `p0` = presión en t=0. |
+| `p0` | 380 bar | Presión inicial (T-R1: con la caja nueva, 300 bar hacía que BHP altos nunca fluyeran). |
 | `lag` | 24 meses | Retardo con que el soporte del inyector "llega" al productor: `1−exp(−t/lag)`. Un solo valor para todas las aristas → **esta es la simplificación que la variante GCPRM relajaría** (decisión S2 pendiente). |
-| `pv` | 2.6×10⁷ m³ | Volumen poroso por productor: escala contra la que se mide el "agua ya dirigida acumulada" para el breakthrough. `pv` = pore volume. |
+| `pv` | 8×10⁵ m³ | Volumen poroso por productor: escala contra la que se mide el "agua ya dirigida acumulada" para el breakthrough (recalibrado a la caja nueva). `pv` = pore volume. |
+| `q_ref`, `cone_v` | 400 m³/d, 0.3 | **Cono dinámico**: caudal alto estira la interfaz agua-aceite → `fw` sube un factor `1+cone_v·q/q_ref`. `cone` = cono de agua. |
+| `p_woc`, `cone_b` | 330 bar, 0.9 | **Cono por drawdown**: producir por debajo del contacto agua-aceite (`p_woc` = pressure, water-oil contact) acerca el agua: factor `1+cone_b·(p_woc−bhp)/100`. Es lo que hace que BHP bajo NO sea gratis (antes el óptimo era siempre el borde de caja). |
 | `days` | 30 | Días por mes (convierte tasas diarias en volúmenes mensuales). |
 
 **Nota sobre `seed=42`:** semilla del mock ≠ semilla del algoritmo. Cambiar la
@@ -81,11 +84,11 @@ donde hay recurrencia temporal):
    - `p_cur += (support_t[k] − q[k])/c_store` — balance de masas: lo que entra menos lo que sale, acumulado como presión.
    - `p`/`q` — historiales `(130,4)` (se guardan para diagnóstico; el NPV no usa `p`).
 5. **Fracción de agua y split aceite/agua**
-   - `fw = clip(0.15 + 0.85·(cum_dir/pv)^0.6, 0, 0.98)` — **fracción de agua** (water cut). Arranca en 15%, sube con el volumen de agua dirigido acumulado (potencia 0.6 = curva suave, no física exacta), techo 98%. `fw` = fraction of water (equivalente a WWCT en los summaries de OPM).
-   - `q_oil = q·(1−fw)` / `q_liq = q` — lo que vende vs lo que paga coste.
-6. **NPV**
+   - `fw = clip(0.15 + 0.85·(cum_dir/pv)^0.6·(1 + cone_v·q/q_ref + cone_b·dd), 0.15, 0.98)` — **fracción de agua** (water cut). Arranca en 15%, sube con el volumen de agua dirigido acumulado (potencia 0.6 = curva suave, no física exacta) y lo aceleran los dos conos: caudal alto y drawdown bajo el WOC. Techo 98%. `fw` = fraction of water (equivalente a WWCT en los summaries de OPM).
+   - `q_oil = q·(1−fw)` / `q_wat = q·fw` / `q_liq = q` — lo que vende vs lo que paga waterCost vs lo que se registra como curva.
+6. **NPV (las 3 tarifas de NPVHandler)**
    - `disc_t = disc**(-t)` — factor de descuento (un USD del mes 130 vale menos).
-   - `cash = (Σ_j q_oil·price − Σ_j q_liq·cost)·days` — flujo mensual del campo (sumando pozos con `axis=1`).
+   - `cash = (Σ_j q_oil·45 − Σ_j q_wat·6 − (Σ_i rate_i)·2)·days` — flujo mensual del campo: ingreso de aceite, coste del agua producida y coste del bombeo de inyección (este último no depende del tiempo: controles constantes).
    - `npv = (cash·disc_t).sum()` — el fitness.
 7. **Retorno**: `{"npv", "prod_curve": q_liq.T, "fw_curve": fw.T}` —
    el `.T` transpone de `(130,4)` (orden del cálculo) a `(4,130)`: **la

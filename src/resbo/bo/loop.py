@@ -18,7 +18,7 @@ from .acquisition import acquisition, prior_weight
 class BayesOptimizer:
     def __init__(self, protocol, simulator, db: SimDatabase,
                  prior_model=None, n_models=5, batch=None, iters=None,
-                 pool=4000, n_init=5, w0=None, tau_decay=None, epochs=300):
+                 pool=4000, n_init=None, w0=None, tau_decay=None, epochs=300):
         self.p = protocol
         self.sim = simulator
         self.db = db
@@ -27,7 +27,8 @@ class BayesOptimizer:
         self.batch = batch or protocol["budget"]["bo"]["batch"]
         self.iters = iters or protocol["budget"]["bo"]["iters"]
         self.pool = pool
-        self.n_init = n_init
+        self.n_init = (n_init if n_init is not None
+                       else int(protocol["budget"]["bo"].get("n_init", 5)))
         pr = protocol["prior"]
         self.w0 = pr["w0"] if w0 is None else w0
         self.tau_decay = pr["decay_obs"] if tau_decay is None else tau_decay

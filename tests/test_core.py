@@ -78,10 +78,9 @@ def test_pso_matches_repo_semantics():
         # inicial separada como MFO/GWO)
         assert len(y) == p["budget"]["metaheuristics"]["pop"] * \
             p["budget"]["metaheuristics"]["iters"]
-        # la particula 0 arranca anclada al centro de la caja
+        # la particula 0 arranca anclada al control base del deck (79.5/395)
         it0 = [r for r in recs if r.iteration == 0]
-        lb, ub = p.bounds
-        assert any(np.allclose(r.controls, 0.5 * (lb + ub)) for r in it0)
+        assert any(np.allclose(r.controls, p.base_controls) for r in it0)
         db.save()
 
 

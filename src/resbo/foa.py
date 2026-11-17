@@ -34,14 +34,15 @@ class FOA:
         self.seed = seed
         cfg = protocol.d.get("foa", {})
         self.step = float(cfg.get("step", 0.1))   # fraccion de caja (repo: 0.1)
+        self.base = protocol.base_controls
 
     def run(self) -> float:
         rng = np.random.default_rng(self.seed)
         d = len(self.lb)
         span = self.ub - self.lb
 
-        # Paso 1: centro de osmoforos = ancla (aqui, centro de la caja)
-        center = 0.5 * (self.lb + self.ub)
+        # Paso 1: centro de osmoforos = ancla (control base del deck, como en el repo)
+        center = self.base.copy()
         gbest, gval = center.copy(), -np.inf
 
         for it in range(self.iters):

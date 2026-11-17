@@ -46,6 +46,19 @@ class Protocol:
         return int(self.d["n_seeds"])
 
 
+    @property
+    def base_controls(self):
+        """Control base del deck [rate x n_inj, bhp x n_prod] (injectorValues/
+        producerValues de BIOPSO). Sin la seccion `base_controls`, centro de caja."""
+        import numpy as np
+        bc = self.d.get("base_controls")
+        if not bc:
+            lb, ub = self.bounds
+            return 0.5 * (lb + ub)
+        r, b = float(bc["rate"]), float(bc["bhp"])
+        return np.array([r] * self.n_inj + [b] * self.n_prod)
+
+
 def repo_root() -> str:
     """Directorio raiz del proyecto resbo/ (contiene configs/ y experiments/)."""
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

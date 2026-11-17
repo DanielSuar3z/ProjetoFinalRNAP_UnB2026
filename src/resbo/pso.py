@@ -3,7 +3,7 @@
 Ese es el codigo que genera los datos de entrenamiento en MC2, asi que la
 version local replica SUS formulas (no la canonica EvoloPy):
   - w constante (psoInertia=0.7), c1=c2=1.5 (psoCognitive/psoSocial)
-  - particula 0 anclada al control base del caso (aqui: centro de la caja)
+  - particula 0 anclada al control base del caso (protocol.base_controls)
   - velocidad inicial +-5% del ancho de caja por coordenada
   - SIN clip de velocidad (Vmax); solo clip de posicion a la caja
   - fitness = NPV medido (maximizar directo; sin truco costo=-NPV)
@@ -27,11 +27,12 @@ class PSO:
         self.sim = simulator
         self.db = db
         self.seed = seed
-        cfg = protocol.d.get("pso", {})
+        self.cfg = protocol.d.get("pso", {})
+        self.base = protocol.base_controls
         # defaults = defaults del repo (psoInertia/psoCognitive/psoSocial)
-        self.w = float(cfg.get("inertia", 0.7))
-        self.c1 = float(cfg.get("cognitive", 1.5))
-        self.c2 = float(cfg.get("social", 1.5))
+        self.w = float(self.cfg.get("inertia", 0.7))
+        self.c1 = float(self.cfg.get("cognitive", 1.5))
+        self.c2 = float(self.cfg.get("social", 1.5))
 
     def run(self) -> float:
         rng = np.random.default_rng(self.seed)
@@ -39,7 +40,7 @@ class PSO:
         span = self.ub - self.lb
 
         pos = self.lb + rng.random((self.n, d)) * span
-        pos[0, :] = 0.5 * (self.lb + self.ub)      # ancla = "control base"
+        pos[0, :] = self.base                        # ancla = control base del deck
         vel = (rng.random((self.n, d)) - 0.5) * span * 0.1
 
         pbest = pos.copy()
