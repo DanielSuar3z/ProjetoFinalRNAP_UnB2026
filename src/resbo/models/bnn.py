@@ -135,3 +135,39 @@ class BnnEnsemble:
         mu = P.mean(axis=0) * self.y_sd + self.y_mu
         sd = P.std(axis=0) * self.y_sd
         return mu, sd
+
+    # ---- persistencia (contrato bnn_v1.npz: lo consume resbo_wellcontrol/T-R5) --
+    def save_npz(self, path: str) -> str:
+        """Pesos + estadisticos de normalizacion en un npz sin pickle.
+        Claves: x_mu/x_sd/y_mu/y_sd/hidden/p_drop/seed/n_models y m{k}_W{i}/m{k}_b{i}."""
+        if not self.models:
+            raise RuntimeError("nada que guardar: entrenar el ensemble primero")
+        d = {"x_mu": self.x_mu, "x_sd": self.x_sd,
+             "y_mu": np.float64(self.y_mu), "y_sd": np.float64(self.y_sd),
+             "hidden": np.asarray(self.hidden, dtype="int64"),
+             "p_drop": np.float64(self.p_drop), "seed": np.int64(self.seed),
+             "n_models": np.int64(self.n_models)}
+        for k, m in enumerate(self.models):
+            for i, (W, b) in enumerate(zip(m.W, m.b)):
+                d[f"m{k}_W{i}"] = W
+                d[f"m{k}_b{i}"] = b
+        np.savez_compressed(path, **d)
+        return path
+
+    @classmethod
+    def load_npz(cls, path: str) -> "BnnEnsemble":
+        """Reconstruye el ensemble de save_npz (allow_pickle=False)."""
+        z = np.load(path, allow_pickle=False)
+        hidden = tuple(int(v) for v in z["hidden"])
+        obj = cls(n_models=int(z["n_models"]), hidden=hidden,
+                  p_drop=float(z["p_drop"]), seed=int(z["seed"]))
+        obj.x_mu, obj.x_sd = z["x_mu"], z["x_sd"]
+        obj.y_mu, obj.y_sd = float(z["y_mu"]), float(z["y_sd"])
+        d = len(z["x_mu"])
+        obj.models = []
+        for k in range(obj.n_models):
+            m = _MLP(d, hidden, seed=0, p_drop=obj.p_drop)
+            m.W = [np.asarray(z[f"m{k}_W{i}"]) for i in range(len(m.W))]
+            m.b = [np.asarray(z[f"m{k}_b{i}"]) for i in range(len(m.b))]
+            obj.models.append(m)
+        return obj

@@ -113,3 +113,117 @@ def test_foa_elitism_and_budget():
 def test_auc_monotone():
     h = [(i, float(i)) for i in range(1, 6)]
     assert auc(h) > 0
+
+
+# ------------------------------------------------- T-R2: loader de artefactos BIOPSO
+
+def test_loader_simlog_roundtrip():
+    """Fixture spec-v1 -> SimDatabase: conteo, shapes y round-trip en disco."""
+    import tempfile
+    from resbo.database import SimDatabase
+    from resbo.loader_biopso import load_run, make_synthetic_run
+    p = _proto()
+    sim = MockSimulator(p, seed=42)
+    with tempfile.TemporaryDirectory() as td:
+        run = make_synthetic_run(os.path.join(td, "random", "run_01"),
+                                 sim, p, seed=1, n_sims=12, agents_per_round=4)
+        db = SimDatabase(os.path.join(td, "db"))
+        n = load_run(run, "random", seed=7, db=db)
+        assert n == 12 == len(db.records)
+        r0 = db.records[0]
+        assert r0.algo == "random" and r0.seed == 7 and r0.iteration == 1
+        assert r0.controls.shape == (12,)
+        assert len(r0.prod_curve) == p.n_prod * p.horizon
+        assert np.any(r0.prod_curve > 0)
+        # la etiqueta del harvest debe salir del padre (<root>/random/run_XX)
+        from resbo.loader_biopso import load_harvest
+        db2 = SimDatabase(os.path.join(td, "db2"))
+        load_harvest(td, db2)
+        assert {r.algo for r in db2.records} == {"random"}
+        # persistencia del CSV del lado resbo
+        db.save()
+        db3 = SimDatabase.load(os.path.join(td, "db"))
+        assert len(db3.records) == 12
+        assert np.allclose(db3.records[5].controls, db.records[5].controls)
+        assert db3.records[5].npv == db.records[5].npv
+
+
+def test_loader_rejects_bad_artifacts():
+    """Cabecera corrupta y wpr todo-ceros deben fallar ruidosamente (SpecViolation)."""
+    import csv as _csv
+    import tempfile
+    from resbo.database import SimDatabase
+    from resbo.loader_biopso import SPEC_HEADER, SpecViolation, load_run
+    with tempfile.TemporaryDirectory() as td:
+        bad = os.path.join(td, "run_01")
+        os.makedirs(bad)
+        with open(os.path.join(bad, "simlog.csv"), "w") as f:
+            f.write("iter,agente,x1\n1,0,1.0\n")
+        try:
+            load_run(bad, "x", 0, SimDatabase(os.path.join(td, "db1")))
+            raise AssertionError("cabecera corrupta no fue rechazada")
+        except SpecViolation:
+            pass
+        # npz con wpr todo-ceros (SUMMARY sin WWPR) -> rechazo (spec §2.5)
+        zp = os.path.join(td, "run_02")
+        os.makedirs(zp)
+        with open(os.path.join(zp, "simlog.csv"), "w", newline="") as f:
+            w = _csv.writer(f)
+            w.writerow(SPEC_HEADER)
+            w.writerow([1, 0] + ["1.0"] * 12 + ["1.0"])
+        np.savez_compressed(os.path.join(zp, "sim_curves.npz"),
+                            wpr=np.zeros((1, 4, 130)),
+                            wir=np.ones((1, 8, 130)),
+                            time_days=np.arange(130.0),
+                            sim_index=np.arange(1),
+                            producer_wells=np.array("p1 p2 p3 p4".split()),
+                            injector_wells=np.array(f"i0 i1 i2 i3 i4 i5 i6 i7".split()))
+        try:
+            load_run(zp, "x", 0, SimDatabase(os.path.join(td, "db2")))
+            raise AssertionError("wpr todo-ceros no fue rechazado")
+        except SpecViolation:
+            pass
+
+
+def test_loader_rescue_run():
+    """Ruta B (rescate T-B4): well_curves.csv + best_controls.json -> 1 fila."""
+    import tempfile
+    from resbo.database import SimDatabase
+    from resbo.loader_biopso import load_run, make_synthetic_run
+    p = _proto()
+    sim = MockSimulator(p, seed=42)
+    with tempfile.TemporaryDirectory() as td:
+        run = make_synthetic_run(os.path.join(td, "mfo", "run_02"),
+                                 sim, p, seed=2, n_sims=8, rescue=True)
+        db = SimDatabase(os.path.join(td, "db"))
+        n = load_run(run, "mfo", seed=0, db=db)
+        assert n == 1
+        r = db.records[0]
+        assert r.iteration == -1 and r.algo == "mfo"
+        assert len(r.prod_curve) == p.n_prod * p.horizon
+        assert np.any(r.prod_curve > 0)
+        assert np.isfinite(r.npv)
+
+
+# ------------------------------------------------------ T-R3: persistencia del BNN
+
+def test_bnn_save_load_roundtrip():
+    """save_npz/load_npz (allow_pickle=False) reproducen las predicciones base."""
+    import tempfile
+    from resbo.models.bnn import BnnEnsemble
+    rng = np.random.default_rng(0)
+    X = rng.random((40, 3))
+    y = X @ np.array([2.0, -1.0, 0.5]) + 0.1 * rng.normal(size=40)
+    m = BnnEnsemble(n_models=2, hidden=(8, 8), seed=0)
+    m.fit_norm_stats(X)
+    m.fit(X, y, epochs=30)
+    base_a = np.array([mod.predict(m._norm(X)) for mod in m.models])
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "bnn.npz")
+        m.save_npz(path)
+        m2 = BnnEnsemble.load_npz(path)
+        base_b = np.array([mod.predict(m2._norm(X)) for mod in m2.models])
+    assert np.allclose(base_a, base_b)
+    assert (m2.x_sd > 0).all()
+    mu, sd = m2.predict(X, mc_samples=8)
+    assert mu.shape == (40,) and (sd >= 0).all()

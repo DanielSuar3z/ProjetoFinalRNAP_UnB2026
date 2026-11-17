@@ -7,5 +7,9 @@ __pycache__/
 # Resultados regenerables grandes (la demo toy pequeña sí se versiona)
 *.pkl
 
+# Artefactos regenerables: modelos entrenados, BD derivadas y cosechas sintéticas
+experiments/models/
+experiments/demo_harvest/
+
 # Referencia de código PRIVADO del equipo (repo BIOPSO) — no publicar
 docs/ref_biopso/

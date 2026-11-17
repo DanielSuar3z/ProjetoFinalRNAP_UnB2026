@@ -32,6 +32,8 @@ cada variable, función y clase: **qué es, para qué sirve, cómo se lee su nom
 | 13 | [analysis_metrics.md](analysis_metrics.md) | `src/resbo/analysis/metrics.py` | AUC, Mann-Whitney, rank-biserial |
 | 14 | [toy_experiment.md](toy_experiment.md) | `scripts/toy_experiment.py` | Demo end-to-end de los 6 brazos |
 | 15 | [test_core.md](test_core.md) | `tests/test_core.py` | Tests del núcleo (ejecutables sin pytest) |
+| 16 | [loader_biopso.md](loader_biopso.md) | `src/resbo/loader_biopso.py` | Lector estricto del contrato simlog_spec_v1 + fixtures sintéticos |
+| 17 | [scripts_train_y_validate.md](scripts_train_y_validate.md) | `scripts/train_bnn.py`, `scripts/validate_loader.py` | Entrenamiento standalone del BNN (gate NRMSE) + verificador de contrato |
 
 ## Los archivos `__init__.py` (no tienen nota propia)
 
