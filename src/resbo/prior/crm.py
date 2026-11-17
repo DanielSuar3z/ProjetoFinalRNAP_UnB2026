@@ -15,6 +15,8 @@ usa como sesgo decreciente en el tiempo (estilo DynMeanBO, ICLR 2026).
 """
 from __future__ import annotations
 
+import json
+
 import numpy as np
 
 
@@ -116,3 +118,55 @@ class VoidagePrior:
 
     def score_many(self, X: np.ndarray) -> np.ndarray:
         return np.zeros(X.shape[0])
+
+
+# --------------------------------------------------------------- crm_v1.npz
+# Contracto de persistencia del prior (hermano de bnn_v1.npz, misma filosofia:
+# npz sin pickle, schema versionado, legible por el brazo BO del lado BIOPSO).
+#
+#   schema      b"crm_v1"
+#   tau         (n_inj, n_prod) float64  — tau FINAL (columnas de pozos fallidos
+#                                          en cero: el score ignora pozos no confiables)
+#   tau_full    (n_inj, n_prod)          — tau cruda del ajuste (auditoria)
+#   q0          (n_prod,)                — produccion "natural" sin soporte
+#   fit_r2      (n_prod,)                — R2 late-time por pozo (la metrica del gate)
+#   well_mask   (n_prod,) int8           — 1 = pozo confiable (R2 >= r2_min)
+#   meta_json   str                      — proveniencia, hiperparametros, fecha
+#
+# well_mask vive AQUI y no solo en el metrics.json porque T-R5 (BIOPSO) debe
+# poder decidir sin leer archivos sueltos: si un pozo falla el gate, su columna
+# de tau en cero hace que score() simplemente no lo tome en cuenta.
+
+CRM_SCHEMA = "crm_v1"
+
+
+def save_crm_npz(path: str, crm: "CRMModel", well_mask: np.ndarray,
+                 meta: dict | None = None) -> str:
+    meta = dict(meta or {})
+    np.savez_compressed(
+        path,
+        schema=np.array(CRM_SCHEMA),
+        tau=crm.tau, tau_full=np.asarray(meta.pop("tau_full", crm.tau), float),
+        q0=crm.q0, fit_r2=crm.fit_r2,
+        well_mask=np.asarray(well_mask, dtype="int8"),
+        n_runs_used=np.int64(crm.n_runs_used),
+        meta_json=np.array(json.dumps(meta, default=str)),
+    )
+    return path
+
+
+def load_crm_npz(path: str) -> tuple["CRMModel", np.ndarray, dict]:
+    """Devuelve (crm, well_mask, meta). Rechaza schemas distintos de crm_v1."""
+    with np.load(path, allow_pickle=False) as z:
+        schema = str(z["schema"])
+        if schema != CRM_SCHEMA:
+            raise ValueError(f"{path}: schema '{schema}', esperado '{CRM_SCHEMA}'")
+        tau = np.asarray(z["tau"], float)
+        crm = CRMModel(n_inj=tau.shape[0], n_prod=tau.shape[1])
+        crm.tau = tau
+        crm.q0 = np.asarray(z["q0"], float)
+        crm.fit_r2 = np.asarray(z["fit_r2"], float)
+        crm.n_runs_used = int(z["n_runs_used"])
+        mask = np.asarray(z["well_mask"], dtype="int8")
+        meta = json.loads(str(z["meta_json"]))
+    return crm, mask, meta

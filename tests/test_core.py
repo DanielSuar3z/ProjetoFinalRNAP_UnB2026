@@ -226,3 +226,39 @@ def test_bnn_save_load_roundtrip():
     assert (m2.x_sd > 0).all()
     mu, sd = m2.predict(X, mc_samples=8)
     assert mu.shape == (40,) and (sd >= 0).all()
+
+
+def test_crm_npz_roundtrip_and_mask():
+    """crm_v1.npz: roundtrip exacto, well_mask persiste, schema ajeno rechazado."""
+    import tempfile
+    from resbo.prior import load_crm_npz, save_crm_npz
+    crm = CRMModel(8, 4)
+    rng = np.random.default_rng(0)
+    crm.tau = rng.random((8, 4))
+    crm.q0 = rng.random(4)
+    crm.fit_r2 = np.array([0.9, 0.8, 0.5, 0.2])
+    crm.n_runs_used = 123
+    mask = (crm.fit_r2 >= 0.7).astype("int8")
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "crm.npz")
+        save_crm_npz(path, crm, mask, meta={"fuente": "test", "tau_full": crm.tau})
+        crm2, mask2, meta2 = load_crm_npz(path)
+        assert np.allclose(crm.tau, crm2.tau)
+        assert np.allclose(crm.q0, crm2.q0)
+        assert np.array_equal(mask, mask2) and mask2.tolist() == [1, 1, 0, 0]
+        assert crm2.n_runs_used == 123 and meta2["fuente"] == "test"
+        assert "tau_full" not in meta2          # se guardo como array, no en meta
+        # columna de pozo fallido en cero -> el score ignora ese pozo
+        crm2.tau[:, mask2 == 0] = 0.0
+        x = np.r_[np.full(8, 100.0), np.full(4, 300.0)]
+        s2 = crm2.score(x)
+        crm3, _, _ = load_crm_npz(path)
+        crm3.tau[:, 2:] = 0.0
+        assert abs(s2 - crm3.score(x)) < 1e-12
+        # schema ajeno
+        np.savez(path, schema=np.array("crm_v0"))
+        try:
+            load_crm_npz(path)
+            raise AssertionError("debio rechazar schema crm_v0")
+        except ValueError:
+            pass

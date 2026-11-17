@@ -31,6 +31,7 @@ resbo/
 ├── experiments/               # resultados versionados (results.csv) + BOARD.md de jobs MC2
 ├── scripts/toy_experiment.py  # DEMO end-to-end con MockSimulator (sin MC2, sin OPM)
 ├── scripts/train_bnn.py       # entrena BNN desde una BD (gate NRMSE_val < 5%) → bnn_*.npz
+├── scripts/fit_crm.py         # ajusta el prior CRM (gate R² por pozo) → crm_*.npz (--self-check sin datos)
 ├── scripts/validate_loader.py # verificador del contrato simlog (--self-check sin datos)
 ├── docs/estudo/               # notas de estudio + contrato simlog_spec_v1 (source of truth)
 ├── docs/guia_codigo/          # una nota por archivo del repo, explicada a detalle

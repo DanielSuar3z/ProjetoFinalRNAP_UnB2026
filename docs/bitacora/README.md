@@ -11,7 +11,7 @@ estamos haciendo"*.
 | Documento | Formato | Pregunta que responde |
 |---|---|---|
 | `CHANGELOG.md` (raíz) | tabla de filas | ¿QUÉ se decidió y CUÁNDO? (registro compacto, regla heredada de BIOPSO) |
-| `docs/guia_codigo/` (17 notas) | una nota por archivo | ¿CÓMO funciona este archivo, línea por línea? |
+| `docs/guia_codigo/` (18 notas) | una nota por archivo | ¿CÓMO funciona este archivo, línea por línea? |
 | `docs/estudo/` | notas de estudio | ¿QUÉ dice la literatura sobre este tema? |
 | **`docs/bitacora/` (esto)** | narrativa por paso | ¿POR QUÉ llegamos al estado actual y qué aprendimos en el camino? |
 
@@ -30,6 +30,7 @@ Si quieres ENTENDER el proyecto (no solo operarlo), lee esta bitácora en orden.
 | [07](07_loader_bnn_y_gates.md) | Loader estricto, persistencia BNN (`bnn_v1.npz`) y gates de calidad | 2026-11-17 | ✔ |
 | [08](08_t_r1_realineacion_egg_test.md) | T-R1: realineación del protocolo local al caso EGG_TEST real | 2026-11-17 | ✔ |
 | [09](09_calendario_y_pendientes.md) | Re-ancoraje a la fecha real de entrega (09/12/2026) y cola de tareas | 2026-11-17 | en curso |
+| [10](10_t_r4_crm_offline.md) | T-R4 preparado offline: script `fit_crm.py`, contracto `crm_v1.npz` y gate por pozo | 2026-11-17 | ✔ |
 
 ## Convenciones de la bitácora
 

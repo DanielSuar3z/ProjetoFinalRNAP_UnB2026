@@ -48,10 +48,10 @@ robustez (5.4) → fuera. Perillas de contingencia en orden: n_seeds BO
    y `harvest_2026_11/`. Sin esto, T-R4 y `bnn_v1` no empiezan. (MC2 SSH caído
    desde 07/11; la coleta se corrió en el PC nuevo según el runbook — falta
    confirmar con el ejecutor la ruta exacta de origen.)
-2. **T-R4** `scripts/fit_crm.py`: ajuste CRM sobre los `sim_curves.npz` de la
-   coleta, gate por pozo R² ≥ 0.7, con la caveat ya documentada: en el mock
-   `prod_curve` es tasa de LÍQUIDO, en el npz real es `wpr` → el fit real usa
-   las series reales (consistencia CRM↔datos, no CRM↔mock).
+2. **T-R4** `scripts/fit_crm.py`: ✔ construido y auto-validado OFFLINE (paso 10,
+   self-check + 12/12 tests). Falta solo `--harvest` real: gate por pozo
+   R² ≥ 0.7, con la caveat documentada en `curva_source` (mock = tasa de
+   LÍQUIDO, npz real = `wpr`) que se decide con datos delante.
 3. **`bnn_v1` real**: `train_bnn.py` sobre la base de la coleta (1.920 sims +
    rescate) → gate NRMSE < 5%. El toy ya demostró que el gate muerde.
 4. **T-R5** `resbo_wellcontrol.py`: el brazo BO como algoritmo de BIOPSO

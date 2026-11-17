@@ -34,6 +34,7 @@ cada variable, función y clase: **qué es, para qué sirve, cómo se lee su nom
 | 15 | [test_core.md](test_core.md) | `tests/test_core.py` | Tests del núcleo (ejecutables sin pytest) |
 | 16 | [loader_biopso.md](loader_biopso.md) | `src/resbo/loader_biopso.py` | Lector estricto del contrato simlog_spec_v1 + fixtures sintéticos |
 | 17 | [scripts_train_y_validate.md](scripts_train_y_validate.md) | `scripts/train_bnn.py`, `scripts/validate_loader.py` | Entrenamiento standalone del BNN (gate NRMSE) + verificador de contrato |
+| 18 | [scripts_fit_crm.md](scripts_fit_crm.md) | `scripts/fit_crm.py`, contracto `crm_v1.npz` (`prior/crm.py`) | Ajuste del prior CRM con gate R² por pozo (T-R4); tau con máscara de pozos |
 
 ## Los archivos `__init__.py` (no tienen nota propia)
 
