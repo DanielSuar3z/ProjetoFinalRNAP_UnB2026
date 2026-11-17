@@ -33,6 +33,7 @@ Si quieres ENTENDER el proyecto (no solo operarlo), lee esta bitácora en orden.
 | [10](10_t_r4_crm_offline.md) | T-R4 preparado offline: script `fit_crm.py`, contracto `crm_v1.npz` y gate por pozo | 2026-11-17 | ✔ |
 | [11](11_t_r5_brazo_bo_biopso.md) | T-R5: el brazo BO cruza la frontera — BIOPSO corre la Optimización Bayesiana | 2026-11-17 | ✔ |
 | [12](12_t_r6_agregado_seis_brazos.md) | T-R6 (parte 1): la máquina de los números — agregado de los 6 brazos para el artigo | 2026-11-17 | ✔ |
+| [13](13_decisiones_anexo_gates_datos.md) | Decisiones del ejecutor: anexo de alcance en la proposta, gate S2 confirmado y plan de datos | 2026-11-17 | ✔ |
 
 ## Convenciones de la bitácora
 
