@@ -33,6 +33,7 @@ resbo/
 ├── scripts/train_bnn.py       # entrena BNN desde una BD (gate NRMSE_val < 5%) → bnn_*.npz
 ├── scripts/fit_crm.py         # ajusta el prior CRM (gate R² por pozo) → crm_*.npz (--self-check sin datos)
 ├── scripts/export_deploy.py   # empaqueta deploy/resbo_v1/ para el brazo BO de BIOPSO (gates + manifest sha256)
+├── scripts/compare_arms.py    # tabla de los 6 brazos para o artigo: Mann-Whitney/r_rb + boxplot (--self-check)
 ├── scripts/validate_loader.py # verificador del contrato simlog (--self-check sin datos)
 ├── deploy/resbo_v1/           # (generado, no versionado) data_v1 + crm_v1 + bnn_v1 + manifest → MC2 por rsync
 ├── docs/estudo/               # notas de estudio + contrato simlog_spec_v1 (source of truth)

@@ -36,6 +36,7 @@ cada variable, función y clase: **qué es, para qué sirve, cómo se lee su nom
 | 17 | [scripts_train_y_validate.md](scripts_train_y_validate.md) | `scripts/train_bnn.py`, `scripts/validate_loader.py` | Entrenamiento standalone del BNN (gate NRMSE) + verificador de contrato |
 | 18 | [scripts_fit_crm.md](scripts_fit_crm.md) | `scripts/fit_crm.py`, contracto `crm_v1.npz` (`prior/crm.py`) | Ajuste del prior CRM con gate R² por pozo (T-R4); tau con máscara de pozos |
 | 19 | [scripts_export_deploy.md](scripts_export_deploy.md) | `scripts/export_deploy.py`, contracto `resbo_data_v1` | Empaquetado del deploy del brazo BO para BIOPSO (T-R5): experiencia + prior + surrogate con atestación de gates y manifest sha256 |
+| 20 | [analysis_compare.md](analysis_compare.md) | `src/resbo/analysis/compare.py`, `scripts/compare_arms.py` | Agregado de los 6 brazos para el artigo (T-R6/S5): descriptivos, Mann-Whitney/r_rb, tablas markdown y figura, con AUC en sims y política de rescate |
 
 ## Los archivos `__init__.py` (no tienen nota propia)
 

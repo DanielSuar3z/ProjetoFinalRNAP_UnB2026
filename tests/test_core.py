@@ -262,3 +262,38 @@ def test_crm_npz_roundtrip_and_mask():
             raise AssertionError("debio rechazar schema crm_v0")
         except ValueError:
             pass
+
+
+def test_compare_arms_selfcheck():
+    """T-R6/S5: el pipeline de agregado de los 6 brazos (scripts/compare_arms
+    + analysis/compare.py) se auto-valida contra fixture: geometria resbo
+    (ronda 0 DoE) y clasica conviviendo, AUC en sims (10 vs 6), rescate sin
+    curvas que figura pero no enmascara, run_id duplicado (gana el ultimo),
+    y la direccion del efecto (r_rb) y p de Mann-Whitney correctos."""
+    import importlib.util
+    from resbo.analysis import load_arm, run_compare
+    spec = importlib.util.spec_from_file_location(
+        "compare_arms_cli",
+        os.path.join(os.path.dirname(__file__), "..", "scripts",
+                     "compare_arms.py"))
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    assert cli._self_check() == 0
+    # umbral opcional: la columna extra aparece solo si se pide
+    import tempfile
+    d = tempfile.mkdtemp()
+    for nombre, base in (("a", 1.0e7), ("b", 0.9e7)):
+        bd = os.path.join(d, nombre)
+        os.makedirs(bd)
+        with open(os.path.join(bd, "results.csv"), "w") as f:
+            f.write("run_id,npv_final,elapsed_seconds,timestamp\n")
+            for rid in (1, 2, 3):
+                f.write(f"{rid},{base + rid * 1e5:.2f},1.0,x\n")
+    arms = [load_arm("a", os.path.join(d, "a")),
+            load_arm("b", os.path.join(d, "b"))]
+    r = run_compare(arms, os.path.join(d, "out1"))
+    assert "sims_al_umbral_mediana" not in r["filas"][0]
+    r2 = run_compare(arms, os.path.join(d, "out2"), threshold=1.15e7)
+    assert "sims_al_umbral_mediana" in r2["filas"][0]
+    p = r2["pares"][0]
+    assert p["comparacion"] == "a vs b" and p["r_biserial"] > 0
