@@ -297,3 +297,61 @@ def test_compare_arms_selfcheck():
     assert "sims_al_umbral_mediana" in r2["filas"][0]
     p = r2["pares"][0]
     assert p["comparacion"] == "a vs b" and p["r_biserial"] > 0
+
+
+def test_crm_bhp_regressor_and_row_constraint():
+    """Caso tipo Flow: el BHP de cada productor mueve su caudal entre corridas.
+
+    Sin el regresor de BHP esa varianza caia en el residuo (R2 bajo y tau
+    sesgada). Con el ajuste conjunto: tau se recupera, cada fila suma <= 1,
+    tau >= 0, y beta_bhp sale con el signo fisico (mas BHP -> menos caudal).
+    """
+    rng = np.random.default_rng(3)
+    n_inj, n_prod, T, n = 8, 4, 60, 120
+    tau_true = rng.uniform(0.2, 1.0, (n_inj, n_prod))
+    tau_true = 0.9 * tau_true / tau_true.sum(axis=1, keepdims=True)
+    beta_true = np.array([-0.8, -0.5, -1.1, -0.3])
+    X = np.column_stack([rng.uniform(0, 150, (n, n_inj)),
+                         rng.uniform(200, 395, (n, n_prod))])
+    curves = []
+    for x in X:
+        q = x[:n_inj] @ tau_true + beta_true * x[n_inj:] + 400.0
+        q = q + rng.normal(0, 1.0, n_prod)
+        curves.append(np.repeat(q[:, None], T, axis=1))
+    crm = CRMModel(n_inj, n_prod).fit(X, curves)
+    assert (crm.tau >= 0).all()
+    assert (crm.tau.sum(axis=1) <= 1.0 + 1e-9).all()
+    assert crm.fit_r2.min() > 0.95, crm.fit_r2
+    assert np.corrcoef(crm.tau.ravel(), tau_true.ravel())[0, 1] > 0.95
+    assert np.allclose(crm.beta_bhp, beta_true, atol=0.05), crm.beta_bhp
+
+    # La version previa (solo tasas, sin BHP) en el mismo caso: R2 se hunde
+    R = X[:, :n_inj]
+    Q = np.array([c[:, -1] for c in curves])
+    A = np.hstack([R, np.ones((n, 1))])
+    sol, *_ = np.linalg.lstsq(A, Q, rcond=None)
+    res = Q - A @ sol
+    r2_old = 1 - (res ** 2).sum(0) / ((Q - Q.mean(0)) ** 2).sum(0)
+    assert r2_old.min() < 0.7, r2_old
+
+
+def test_equivalence_bootstrap_distingue_equivalencia_de_no_significancia():
+    """p > 0.05 no es equivalencia: la prueba con margen delta si lo distingue."""
+    from resbo.analysis import equivalence_bootstrap
+    rng = np.random.default_rng(0)
+    base = 1.6e7
+    delta = 0.02 * base                                   # 320k USD
+    a = base + rng.normal(0, 5e4, 20)
+    b = base + rng.normal(0, 5e4, 20)
+    assert equivalence_bootstrap(a, b, delta)["equivalente"]
+    # desplazamiento real de 3 % -> no equivalente
+    c = base * 1.03 + rng.normal(0, 5e4, 20)
+    assert not equivalence_bootstrap(c, b, delta)["equivalente"]
+    # N chico y ruidoso: Mann-Whitney no rechaza, pero el IC es ancho y la
+    # equivalencia TAMPOCO se puede afirmar (el caso que el p ocultaba)
+    d = base + rng.normal(0, 6e5, 4)
+    e = base + rng.normal(0, 6e5, 4)
+    _, p = mannwhitney(d, e)
+    r = equivalence_bootstrap(d, e, delta)
+    assert p > 0.05 and not r["equivalente"], (p, r)
+    assert r["ic_lo"] <= r["diff_mediana"] <= r["ic_hi"]

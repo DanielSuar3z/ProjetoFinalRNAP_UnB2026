@@ -1,9 +1,13 @@
 """BNN surrogate: ensemble de MLPs con MC-dropout (numpy puro, sin torch).
 
-Ensemble (Lakshminarayanan 2017) + MC-dropout (Gal & Ghahramani 2016):
-  - epistemica: varianza entre miembros del ensemble
-  - aleatoria:  varianza MC-dropout dentro de cada miembro
-Devuelve (mu, sigma) normalizados en la escala ORIGINAL de y.
+Ensemble (Lakshminarayanan 2017) + MC-dropout (Gal & Ghahramani 2016).
+AMBAS fuentes de varianza son EPISTEMICAS (incertidumbre sobre los pesos):
+  - entre miembros del ensemble (bootstrap + inicializacion distinta)
+  - MC-dropout dentro de cada miembro (aproximacion variacional bayesiana)
+No hay cabeza de varianza aleatoria (ruido heteroscedastico): el simulador es
+determinista, asi que la incertidumbre relevante para la adquisicion es la
+epistemica. sigma(x) = desviacion de las n_models*mc_samples predicciones.
+Devuelve (mu, sigma) en la escala ORIGINAL de y.
 Nota: es la version pedagogica/local del modelo. En MC2 puede sustituirse por
 el implementado en torch (mismas firmas predict/fit) sin tocar el laço BO.
 """
@@ -35,16 +39,16 @@ class _MLP:
         self._t = 0
 
     def _forward(self, X, train: bool):
-        acts, zs = [X], []
+        """Activaciones por capa. Con dropout, acts[i] ya lleva la mascara
+        invertida (a = relu(z) * m / (1-p)), asi que acts[i] > 0 <=> (z>0 y m=1)."""
+        acts = [X]
         a = X
         for i, (W, b) in enumerate(zip(self.W, self.b)):
             z = a @ W + b
-            zs.append(z)
             a = _relu(z) if i < len(self.W) - 1 else z
             if train and i < len(self.W) - 1 and self.p_drop > 0:
                 m = (self._rng.random(a.shape) > self.p_drop)
                 a = a * m / (1.0 - self.p_drop)
-                zs[-1] = (z, m)
             acts.append(a)
         return acts
 
@@ -69,12 +73,13 @@ class _MLP:
                     gW[i] = a_prev.T @ delta + wd * self.W[i]
                     gb[i] = delta.mean(axis=0, keepdims=True)
                     if i > 0:
-                        z = acts[i]
-                        if isinstance(z, tuple):      # dropout capa
-                            z_lin, m = z
-                            delta = (delta @ self.W[i].T) * (z_lin > 0) * (m / (1 - self.p_drop))
-                        else:
-                            delta = (delta @ self.W[i].T) * (z > 0)
+                        # d a / d z = 1[z>0] * m / (1-p): la indicadora sale de
+                        # acts[i] > 0 (ya enmascarado) y el factor de escala del
+                        # dropout invertido se aplica explicito. (Antes se perdia
+                        # el 1/(1-p): la rama de la tupla nunca se ejecutaba.)
+                        delta = (delta @ self.W[i].T) * (acts[i] > 0)
+                        if self.p_drop > 0:
+                            delta = delta / (1.0 - self.p_drop)
                 self._t += 1
                 for i in range(len(self.W)):
                     for P, mP, vP, g in ((self.W[i], self.mW[i], self.vW[i], gW[i]),
