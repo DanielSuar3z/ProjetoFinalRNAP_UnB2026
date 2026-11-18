@@ -48,5 +48,10 @@ prior:
   decay_obs: 30.0            # decaimiento estilo DynMeanBO: w = w0 * exp(-n_obs/decay_obs)
   use_full_crm: true         # false => voidage escalar (caso degenerado)
 
+analysis:
+  equivalence:               # FIJADO 2026-11-17 ANTES de ver datos reales (CHANGELOG)
+    delta_frac: 0.02         # delta = 2 % de la mediana del MEJOR baseline (USD absolutos)
+    ci: 0.90                 # IC90 bootstrap de la dif. de medianas dentro de +-delta (= TOST alpha 0.05)
+
 paths:
   experiments: experiments
