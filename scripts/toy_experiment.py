@@ -79,6 +79,12 @@ def main():
     corr = _corr_tau(crm.tau, sim.tau_true)
     print(f"  CRM ajustado con {crm.n_runs_used} runs; R2 medio="
           f"{crm.fit_r2.mean():.3f}; corr(tau_fit,tau_true)={corr:.3f}")
+    # score calib_v1: pesos del prior ajustados UNA vez con el pool de
+    # baselines (antes del BO) y congelados -- igual que fit_crm.py
+    Xb, yb, _ = db.controls_npv(base_algos)
+    calib = crm.calibrate_score(Xb, yb)
+    print(f"  score calib_v1: Spearman holdout {calib['spearman_holdout_calib']:+.3f}"
+          f" (legacy {calib['spearman_holdout_legacy']:+.3f})")
 
     # 3) brazos BO (reutilizan la base de los baselines: MFO+GWO+PSO+FOA)
     for tag, use_prior in (("bo_prior", True), ("bo", False)):

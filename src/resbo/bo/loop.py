@@ -46,8 +46,19 @@ class BayesOptimizer:
             X[:, j] = (perm + self.rng.random(n)) / n
         return self.lb + X * (self.ub - self.lb)
 
-    def _train_surrogate(self, algo_tags: list[str]):
-        X, y, _ = self.db.controls_npv(algo_tags)
+    def _train_surrogate(self, base_algos: list[str], algo_tag: str, seed: int):
+        """Pool de baselines + SOLO las sims propias de ESTE seed.
+
+        Antes se filtraba por `base_algos + [algo_tag]`, que sobre una db
+        compartida metia las sims BO de los seeds anteriores del mismo brazo:
+        el seed k veia k*90 sims extra y los N seeds dejaban de ser
+        independientes (supuesto de Mann-Whitney). En BIOPSO el pool es el
+        data_v1 fijo, asi que esto alinea el toy con el brazo real.
+        """
+        recs = [r for r in self.db.records
+                if r.algo in base_algos or (r.algo == algo_tag and r.seed == seed)]
+        X = np.vstack([r.controls for r in recs]) if recs else np.empty((0, 0))
+        y = np.array([r.npv for r in recs])
         if len(X) < 6:
             return None
         model = BnnEnsemble(n_models=self.n_models, seed=int(self.rng.integers(1e6)))
@@ -90,7 +101,7 @@ class BayesOptimizer:
         n_sims = self.n_init
 
         for it in range(self.iters):
-            model = self._train_surrogate(list(base_algos) + [algo_tag])
+            model = self._train_surrogate(list(base_algos), algo_tag, seed)
             if model is None:
                 raise RuntimeError("surrogate sin datos")
             cand = self._lhs(self.pool)

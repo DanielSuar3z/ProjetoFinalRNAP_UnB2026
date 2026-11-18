@@ -67,3 +67,27 @@ def rank_biserial(x: np.ndarray, y: np.ndarray) -> float:
     # efecto = (wins_x - wins_y) / (nx*ny)
     wins = sum(U1) - sum(U2)
     return wins / (len(x) * len(y))
+
+
+def equivalence_bootstrap(x: np.ndarray, y: np.ndarray, delta: float,
+                          ci: float = 0.90, n_boot: int = 10000,
+                          seed: int = 0) -> dict:
+    """Prueba de EQUIVALENCIA de medianas (x vs y) con margen absoluto delta.
+
+    Mann-Whitney con p > 0.05 NO demuestra equivalencia (ausencia de evidencia
+    no es evidencia de ausencia). Aca: IC percentil bootstrap (remuestreo
+    independiente por grupo) de d = mediana(x) - mediana(y); se declara
+    equivalencia si el IC al `ci` cae ENTERO dentro de (-delta, +delta).
+    Con ci=0.90 equivale a dos pruebas unilaterales al 5 % (TOST, alpha=0.05).
+    """
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    rng = np.random.default_rng(seed)
+    bx = rng.choice(x, size=(n_boot, x.size), replace=True)
+    by = rng.choice(y, size=(n_boot, y.size), replace=True)
+    d = np.median(bx, axis=1) - np.median(by, axis=1)
+    a = (1.0 - ci) / 2.0
+    lo, hi = np.quantile(d, [a, 1.0 - a])
+    return {"diff_mediana": float(np.median(x) - np.median(y)),
+            "ic_lo": float(lo), "ic_hi": float(hi), "ic_nivel": ci,
+            "delta": float(delta),
+            "equivalente": bool(-delta < lo and hi < delta)}

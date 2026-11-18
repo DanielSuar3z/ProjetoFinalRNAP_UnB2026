@@ -110,11 +110,16 @@ def _self_check() -> int:
     assert h[-1][0] == 10, f"AUC resbo deberia ser a 10 sims, es {h[-1][0]}"
     assert a_foa.histories[1][-1][0] == 6
     # 3) estadistica: bo_prior > foa con efecto positivo y p pequeno
-    res = run_compare(arms, os.path.join(d, "out"), ref="bo_prior")
+    res = run_compare(arms, os.path.join(d, "out"), ref="bo_prior",
+                      delta_frac=0.02)
     par = {p["comparacion"]: p for p in res["pares"]}
     pfoa = par["bo_prior vs foa"]
     assert pfoa["r_biserial"] > 0.9 and pfoa["p_valor"] < 0.05, pfoa
     assert par["bo_prior vs gwo"]["r_biserial"] > 0, "direccion equivocada"
+    # 3b) equivalencia: un desplazamiento de +2e6 (>> 2 % del NPV) NO es
+    #     equivalente aunque el test se haga; el delta sale del mejor baseline
+    assert "equivalente" in pfoa and not pfoa["equivalente"], pfoa
+    assert res["delta_ref"] in ("gwo", "foa") and res["delta"] > 0
     # 4) artefactos
     for fn in ("arms_summary.csv", "pairwise.csv", "arms_table.md"):
         assert os.path.exists(os.path.join(res["out_dir"], fn)), fn
@@ -136,6 +141,10 @@ def main():
                          "si no esta entre los dados, compara todos los pares)")
     ap.add_argument("--threshold", type=float, default=None,
                     help="umbral de NPV para sims-to-threshold (opcional)")
+    ap.add_argument("--delta-frac", type=float, default=None,
+                    help="margen de equivalencia como fraccion de la mediana del "
+                         "mejor baseline (default: analysis.equivalence.delta_frac "
+                         "de configs/protocol.yaml; 0 = sin prueba de equivalencia)")
     ap.add_argument("--out-dir", default=os.path.join(ROOT, "experiments",
                                                       "compare"))
     ap.add_argument("--self-check", action="store_true",
@@ -158,9 +167,18 @@ def main():
     if n_min < 3:
         print(f"aviso: hay brazo con n={n_min}; Mann-Whitney no tiene poder "
               "a ese tamano (reportar solo descriptivos)")
+    delta_frac = args.delta_frac
+    if delta_frac is None:
+        import yaml
+        with open(os.path.join(ROOT, "configs", "protocol.yaml")) as f:
+            delta_frac = float(yaml.safe_load(f).get("analysis", {})
+                               .get("equivalence", {}).get("delta_frac", 0.0))
     res = run_compare(arms, args.out_dir, ref=args.ref,
-                      threshold=args.threshold)
+                      threshold=args.threshold, delta_frac=delta_frac or None)
     print(res["markdown"])
+    if res["delta"] is not None:
+        print(f"equivalencia: delta = {res['delta_frac']:.1%} x mediana de "
+              f"{res['delta_ref']} = {res['delta']:,.0f} (IC90 bootstrap)")
     print(f"escrito en {res['out_dir']}"
           + (f" (figura: {os.path.basename(res['png'])})" if res["png"] else
              " (sin figura: matplotlib no disponible)"))

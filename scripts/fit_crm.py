@@ -100,7 +100,25 @@ def fit_and_gate(db: SimDatabase, protocol: Protocol, r2_min: float,
              "avisos_excitacion": avisos,
              "r2_por_pozo": [round(float(r), 4) for r in crm.fit_r2],
              "pozos_ok": int(mask.sum()), "r2_min": r2_min}
-    return crm, mask, stats
+    y = np.array([r.npv for r in recs])
+    return crm, mask, stats, (X, y)
+
+
+def apply_mask_and_calibrate(crm: CRMModel, mask: np.ndarray, X: np.ndarray,
+                             y: np.ndarray) -> tuple[np.ndarray, dict]:
+    """Pozos fuera del gate quedan FUERA del prior (tau, beta y q0 en cero) y
+    LUEGO se calibran los pesos del score sobre la tau final: calibrar antes
+    seria ajustar pesos a features que el brazo BO nunca vera."""
+    tau_full = crm.tau.copy()
+    crm.tau[:, mask == 0] = 0.0
+    crm.beta_bhp[mask == 0] = 0.0
+    crm.q0[mask == 0] = 0.0
+    calib = crm.calibrate_score(X, y)
+    if calib["spearman_holdout_calib"] <= 0.0:
+        print("  AVISO: score calibrado sin poder predictivo en holdout "
+              f"(Spearman {calib['spearman_holdout_calib']:+.3f}) — el prior no "
+              "informa; la ablacion BO-sin-prior lo va a mostrar")
+    return tau_full, calib
 
 
 # ---------------------------------------------------------------- self-check
@@ -126,7 +144,7 @@ def self_check(protocol_path: str, n_runs: int, n_sims: int) -> None:
         load_run(run_dir, "random", 0, db)
     db.save()
 
-    crm, mask, stats = fit_and_gate(db, proto, r2_min=0.7, late_frac=0.4)
+    crm, mask, stats, (Xc, yc) = fit_and_gate(db, proto, r2_min=0.7, late_frac=0.4)
     print(f"[self-check] sims={stats['n_sims_fit']} r2_por_pozo={stats['r2_por_pozo']} "
           f"pozos_ok={stats['pozos_ok']}/{proto.n_prod}")
     assert stats["pozos_ok"] >= 2, "gate por pozo fallido en fixture"
@@ -136,10 +154,18 @@ def self_check(protocol_path: str, n_runs: int, n_sims: int) -> None:
     print(f"[self-check] corr(tau_fit, tau_true) = {r:.3f}")
     assert r > 0.85, f"fixture no recupera estructura (r={r:.2f})"
 
+    _, calib = apply_mask_and_calibrate(crm, mask, Xc, yc)
+    print(f"[self-check] score calib_v1: Spearman holdout "
+          f"{calib['spearman_holdout_calib']:+.3f} (legacy "
+          f"{calib['spearman_holdout_legacy']:+.3f})")
+    assert calib["spearman_holdout_calib"] > calib["spearman_holdout_legacy"], \
+        "el score calibrado deberia ordenar el NPV mejor que el legacy"
+
     path = save_crm_npz(os.path.join(tmp, "crm_selfcheck.npz"), crm, mask,
                         meta={"fuente": "self-check", "curva_source": "mock_liquido"})
     crm2, mask2, meta2 = load_crm_npz(path)
     assert np.allclose(crm.tau, crm2.tau) and np.array_equal(mask, mask2)
+    assert crm2.calibrated and np.allclose(crm.score_many(Xc), crm2.score_many(Xc))
     assert meta2["fuente"] == "self-check"
     print("[self-check] crm_v1.npz save/load roundtrip: OK")
     print("SELF-CHECK OK — el pipeline T-R4 esta listo para recibir coleta_s1")
@@ -180,7 +206,7 @@ def main():
         db = SimDatabase.load(args.db)
         curva_source = "db_prod_curve"
 
-    crm, mask, stats = fit_and_gate(db, proto, args.r2_min, args.late_frac)
+    crm, mask, stats, (Xc, yc) = fit_and_gate(db, proto, args.r2_min, args.late_frac)
 
     print(f"ajuste CRM con {stats['n_sims_fit']} sims "
           f"(late_frac={args.late_frac}, horizonte {stats['horizon']} m)")
@@ -190,14 +216,16 @@ def main():
         print(f"  pozo {j}: R2={stats['r2_por_pozo'][j]:+.3f}  "
               f"{'OK' if mask[j] else 'FUERA (tau columna en cero)'}")
 
-    # decision de gate ANTES de cero-purgar (auditoria en tau_full)
-    tau_full = crm.tau.copy()
-    crm.tau[:, mask == 0] = 0.0
+    # decision de gate ANTES de cero-purgar (auditoria en tau_full); despues
+    # se calibra el score sobre la tau final
+    tau_full, calib = apply_mask_and_calibrate(crm, mask, Xc, yc)
     gate_ok = int(mask.sum()) >= 2
+    print(f"  score calib_v1: Spearman holdout {calib['spearman_holdout_calib']:+.3f} "
+          f"(legacy {calib['spearman_holdout_legacy']:+.3f})")
 
     meta = {"fuente": args.harvest or args.db, "curva_source": curva_source,
             "protocol_reservoir": proto.d.get("reservoir"), "tau_full": tau_full,
-            **stats}
+            **stats, "score": calib}
     npz = save_crm_npz(os.path.join(args.out_dir, f"{args.tag}.npz"), crm, mask, meta)
     out_json = {k: v for k, v in meta.items() if k != "tau_full"}
     out_json.update({"tag": args.tag, "fecha": time.strftime("%Y-%m-%d %H:%M"),

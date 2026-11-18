@@ -30,7 +30,7 @@ import os
 
 import numpy as np
 
-from .metrics import auc, mannwhitney, rank_biserial
+from .metrics import auc, equivalence_bootstrap, mannwhitney, rank_biserial
 
 # nombres canonicos del experimento (tabla de 6 brazos do projeto)
 ARMS_CANON = ("mfo", "gwo", "pso", "foa", "bo_prior", "bo_solo")
@@ -149,10 +149,33 @@ def resumen_brazo(arm: ArmData, threshold: float | None = None) -> dict:
     return fila
 
 
-def pairwise(x: np.ndarray, y: np.ndarray, nombre_x: str, nombre_y: str) -> dict:
-    """Mann-Whitney bilateral + r_rb en la direccion x vs y (x mejor > 0)."""
+BASELINES = ("mfo", "gwo", "pso", "foa")
+
+
+def delta_equivalencia(arms: list, delta_frac: float) -> tuple[float, str]:
+    """delta absoluto = delta_frac * mediana del MEJOR baseline presente.
+
+    Un unico delta en USD para todas las comparaciones (fijado en el protocolo
+    ANTES de ver los datos; ver configs/protocol.yaml analysis.equivalence).
+    Sin baselines entre los brazos, usa el brazo de mayor mediana.
+    """
+    cands = [a for a in arms if a.name in BASELINES] or list(arms)
+    mejor = max(cands, key=lambda a: float(np.median(a.y)))
+    return float(delta_frac * abs(np.median(mejor.y))), mejor.name
+
+
+def pairwise(x: np.ndarray, y: np.ndarray, nombre_x: str, nombre_y: str,
+             delta: float | None = None) -> dict:
+    """Mann-Whitney bilateral + r_rb en la direccion x vs y (x mejor > 0).
+    Con `delta` agrega la prueba de equivalencia (IC90 bootstrap vs +-delta)."""
     U, p = mannwhitney(x, y)
     rb = rank_biserial(x, y)
+    eq = {}
+    if delta is not None:
+        e = equivalence_bootstrap(x, y, delta)
+        eq = {"eq_diff_mediana": e["diff_mediana"], "eq_ic90_lo": e["ic_lo"],
+              "eq_ic90_hi": e["ic_hi"], "eq_delta": e["delta"],
+              "equivalente": e["equivalente"]}
     return {
         "comparacion": f"{nombre_x} vs {nombre_y}",
         "n_x": int(np.size(x)), "n_y": int(np.size(y)),
@@ -162,6 +185,7 @@ def pairwise(x: np.ndarray, y: np.ndarray, nombre_x: str, nombre_y: str) -> dict
         # con n pequenos la aproximacion normal es generosa: advertirlo en la
         # propia tabla (el artigo reporta el tamano de efecto como principal)
         "aviso_n_bajo": bool(np.size(x) < 8 or np.size(y) < 8),
+        **eq,
     }
 
 
@@ -177,19 +201,29 @@ def tabla_markdown(filas: list[dict], pares: list[dict]) -> str:
             f"| {f_['arm']} | {f_['n']} | {_f(f_['mean'])} | {_f(f_['median'])} "
             f"| {_f(f_['std'])} | {_f(f_['min'])} | {_f(f_['max'])} "
             f"| {_f(f_['auc_mean'])} | {f_['runs_sin_curvas']} |")
-    lineas += ["", "| comparacion | U | p | r_rb | signif. | aviso |",
-               "|---|---|---|---|---|---|"]
+    con_eq = bool(pares) and "equivalente" in pares[0]
+    cab = "| comparacion | U | p | r_rb | signif. | aviso |"
+    sep = "|---|---|---|---|---|---|"
+    if con_eq:
+        cab += " dif. mediana | IC90 | delta | equiv. |"
+        sep += "---|---|---|---|"
+    lineas += ["", cab, sep]
     for p_ in pares:
-        lineas.append(
-            f"| {p_['comparacion']} | {p_['U']:.0f} | {p_['p_valor']:.2e} "
-            f"| {p_['r_biserial']:+.3f} | {'si' if p_['significativo_0.05'] else 'no'} "
-            f"| {'n bajo' if p_['aviso_n_bajo'] else ''} |")
+        fila = (f"| {p_['comparacion']} | {p_['U']:.0f} | {p_['p_valor']:.2e} "
+                f"| {p_['r_biserial']:+.3f} | {'si' if p_['significativo_0.05'] else 'no'} "
+                f"| {'n bajo' if p_['aviso_n_bajo'] else ''} |")
+        if con_eq:
+            fila += (f" {_f(p_['eq_diff_mediana'])} | [{_f(p_['eq_ic90_lo'])}, "
+                     f"{_f(p_['eq_ic90_hi'])}] | {_f(p_['eq_delta'])} "
+                     f"| {'si' if p_['equivalente'] else 'no'} |")
+        lineas.append(fila)
     return "\n".join(lineas) + "\n"
 
 
 def run_compare(arms: list[ArmData], out_dir: str,
                 ref: str | None = "bo_prior",
-                threshold: float | None = None) -> dict:
+                threshold: float | None = None,
+                delta_frac: float | None = None) -> dict:
     """Escribe arms_summary.csv, pairwise.csv, arms_table.md (+ boxplot si
     hay matplotlib) y devuelve el dict resumen. `ref` = brazo objetivo contra
     el que se comparan los demas; si no esta (o None), todos los pares."""
@@ -199,19 +233,21 @@ def run_compare(arms: list[ArmData], out_dir: str,
     filas = [resumen_brazo(a, threshold) for a in arms]
 
     nombres = [a.name for a in arms]
+    delta, delta_ref = (delta_equivalencia(arms, delta_frac)
+                        if delta_frac else (None, None))
     if ref and ref in nombres:
         otros = [n for n in nombres if n != ref]
         pares = []
         for n in otros:
             ax = arms[nombres.index(ref)]
             ay = arms[nombres.index(n)]
-            pares.append(pairwise(ax.y, ay.y, ref, n))
+            pares.append(pairwise(ax.y, ay.y, ref, n, delta))
     else:
         pares = []
         for i in range(len(arms)):
             for j in range(i + 1, len(arms)):
                 pares.append(pairwise(arms[i].y, arms[j].y,
-                                      arms[i].name, arms[j].name))
+                                      arms[i].name, arms[j].name, delta))
 
     def _csv(path, rows):
         with open(path, "w", newline="") as f:
@@ -243,4 +279,5 @@ def run_compare(arms: list[ArmData], out_dir: str,
         pass                                 # sin matplotlib: tablas igual
 
     return {"filas": filas, "pares": pares, "out_dir": out_dir,
-            "png": png, "markdown": md}
+            "png": png, "markdown": md,
+            "delta": delta, "delta_ref": delta_ref, "delta_frac": delta_frac}

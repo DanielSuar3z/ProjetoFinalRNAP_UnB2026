@@ -125,7 +125,11 @@ def main():
     gate_crm, nota_crm = _gate_hermano(args.crm, args.smoke)
     attest["crm"] = {"fuente": os.path.basename(args.crm), "gate_pass": gate_crm,
                      "pozos_confiables": n_ok, "r2": [round(float(v), 4) for v in r2],
-                     "metrics": nota_crm}
+                     "metrics": nota_crm,
+                     "score": "calib_v1" if crm.calibrated else "legacy"}
+    if not crm.calibrated:
+        avisos.append("crm sin score calib_v1 (npz previo a 2026-11-17): el brazo "
+                      "usara el score legacy; re-correr scripts/fit_crm.py")
     if not args.smoke and (gate_crm is False or gate_crm is None):
         # OJO: el gate de CRM es por pozo (well_mask), no binario del global;
         # gate_pass del metrics de fit_crm = >=2 pozos buenos. <2 ya lo corto
